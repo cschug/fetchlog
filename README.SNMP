@@ -1,0 +1,192 @@
+
+file:   README.SNMP
+author: Alexander Haderer
+date:	17 Jun 2010
+cvs:    $Id: README.SNMP,v 1.4 2010/06/23 09:48:09 afrika Exp $
+
+
+ 		R E A D M E    N E T - S N M P   S E T U P
+
+
+  This file describes how to look into remote syslog file using fetchlog 
+  together with NET-SNMP. NET-SNMP is a collection of SNMP utilities and 
+  can be downloaded from http://www.net-snmp.org .
+
+
+HOW TO 'GET / POLLING'
+
+  Do this if you want to get new syslog messages from remote machine using 
+  SNMP's GET method.
+
+  CONVENTION
+   
+  remote machine: A machine running NET-SNMP's snmpd. The snmpd will offer 
+	SNMP clients the last new messages of a logfile.
+
+  local machine: A machine from where one will take a look at the remote 
+	machines logfile using SNMP.
+
+  snmpd: The SNMP server part of NET-SNMP
+
+  1. install: 
+	Goto remote machine: install fetchlog, install NET-SNMP. 
+
+  2. syslog: 
+	At the remote machine: Use logger(1) to create logfile messages 
+	for testing. Dry run fetchlog from commandline to find the proper 
+	configuration options by fetching the created messages:
+
+	     fetchlog -f 1:80:1000: /var/log/messages /tmp/msg.bm
+
+	Nagios users need the following, others may try it:
+
+	If you want to skip the date-time stamp increase firstcol: Nagios
+	will save a nearby timestamp for you.
+
+	If you want to skip the hostname further increase firstcol: Nagios
+	will save the hostname for you, because Nagios already knows the 
+	host it contacts.
+
+	If you want to safe futher space set lastcol to 75 to abbreviate 
+	long message lines.
+
+	The maximum value for len is: for Nagios 1+2: 330 and for
+	Nagios3 1000 when using net-snmp for remote logfiles. 
+	When using higher values information gets lost! 
+	This is because of a limitation in Nagios' / SNMPs internal data 
+	structures. 
+
+	Nagios 3 has a new format for multiline message which fetchlog 
+	supports by using conversion option '3'. The line may now look 
+	like this:
+
+	Nagios1+2:
+	     fetchlog -f 35:75:330:snob /var/log/messages /tmp/msg.bm
+
+	Nagios 3:
+	     fetchlog -f 35:75:2000:3snob /var/log/messages /tmp/msg.bm
+
+	Note the conversion settings for safe HTML output, single line output,
+	the OK message and shell metacharacter conversion. Nagios mail
+	notification requires shell metacharacter conversion otherwise 
+	messages containing quotes probably will not be send out by Nagios.
+	Option -f is for testing: Don't save bookmark.
+
+  3. snmpd:
+    	Create a config file for snmpd (/usr/local/share/snmp/snmpd.conf): 
+	--------------- snip -------------------
+	############################################
+	# snmpd.conf
+	############################################
+	# SECTION: Access Control Setup
+	#
+	#   This section defines who is allowed to talk to your running
+	#   snmp agent.
+
+	# rocommunity: a SNMPv1/SNMPv2c read-only access community name
+	#   arguments:  community [default|hostname|network/bits] [oid]
+
+	rocommunity  donttell ip_of_local_machine .1.3.6.1.4.1.2021
+
+	############################################
+	# SECTION: Monitor Various Aspects of the Running Host
+
+	# Run a command
+	#
+	# Nagios 1+2 users call fetchlog in singleline format
+	exec kernel /usr/local/bin/fetchlog -F 35:75:330:snob \
+				/var/log/messages /tmp/msg.bm
+
+	# Nagios 3 users call fetchlog in multiline format
+	exec kernel /usr/local/bin/fetchlog -F 35:75:1000:3snob \
+				/var/log/messages /tmp/msg.bm
+
+	--------------- snap -------------------
+
+	Note: Enter the exec lines as one line
+	Note: The fetchlog option now is a capital F: save bookmark
+	Note: SNMP has a length limitiation, so fetchlog len is set to 1000
+
+	Read protect the config file for others! It contains the community
+	string for your snmpd server and acts like a password.
+
+	Note: Using SNMPv1 rocommunity is insecure. man snmpd.
+
+  4. snmpd:
+	(Re)start snmpd.
+
+  5. snmpget / snmpwalk:
+	Goto the local machine and try to fetch the remote messages. If you 
+	have installed NET-SNMP at the local machine you can type:
+	
+	snmpget ip_of_remote_machine donttell .1.3.6.1.4.1.2021.8.1.101.N
+
+	with N = the nth exec entry in snmpd.conf where fetchlog gets called.
+        donttell is the SNMP community name.
+
+	If you disable single line output for fetchlog (leave conversion 'n')
+	you can access each single line of output separatly. Read the manpage 
+	of snmpd and the example snmpd.conf that comes with NET-SNMP how 
+	to access multiline exec output via SNMP and how to setup this.
+
+	Also try a 
+
+	snmpwalk ip_of_remote_machine donttell .1.3.6.1.4.1.2021.8.1
+
+	and option O (capital letter O, man snmpcmd)
+
+	snmpwalk -On ip_of_remote_machine donttell .1.3.6.1.4.1.2021.8.1
+
+	Note: Because snmpd caches the result of exec commands for about 90 
+	seconds successive snmpget calls may show some results twice 
+	without calling fetchlog at the remote machine.
+
+
+HOW TO 'TRAP / PUSH'
+
+  Do this if you want a remote machine to generate SNMP traps if new 
+  kernel syslog messages appear.
+
+  CONVENTION
+   
+  remote machine: A machine running NET-SNMP's snmptrap. The machine will 
+	send out SNMP-traps when new messages of a kernel logfile appear.
+
+  1. general setup:
+  	Goto remote machine. Follow steps 1..2 of "HOW TO 'GET / POLLING'"
+
+  2. snmptrap:
+	Goto remote machine.
+	Read and understand how NET-SNMP's snmptrap utility works. Look 
+	at the NET-SNMP webpages (http://www.net-snmp.org) for the FAQ and
+	the tutorial. Play around with snmptrap, get it working.
+      
+  3. script for cronjob
+	Setup a shell script as shown in the EXAMPLE in README. Edit the 
+	shell script: Instead of the mail command send out an SNMP trap 
+	with the snmptrap command and the fetched message as a
+	parameter. Test what maximum len for fetchlog works together with
+	snmptrap and the trap receiver.
+
+  4. shell script
+	Test the script if it works as expected.
+
+  5. cron
+	Setup a cron job running at regular basis as shown in the EXAMPLE
+	in file README.
+
+
+SEE ALSO
+
+  README.Nagios - How to setup Nagios using fetchlog local or remote.
+
+  NET-SNMP  -  Various  tools relating to the Simple Network
+  Management Protocol SNMP (NET-SNMP: formerly known as UCD- SNMP)
+  http://www.net-snmp.org
+ 
+
+LEGAL
+
+   Nagios is a registered trademark of Ethan Galstad
+
+EOF

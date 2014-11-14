@@ -1,0 +1,381 @@
+.\" =========================================================================
+.\" Copyright (c) 2002, 2003, 2004, 2008  Alexander Haderer
+.\"
+.\" $Id: fetchlog.1,v 1.8 2010/06/18 18:17:47 afrika Exp $
+.\"
+.\" See the accompanying file LICENSE for terms of use.
+.\" ==========================================================================
+.\"
+.\" fetchlog.1 by Alexander Haderer 
+.\"
+.TH fetchlog 1 "23 Nov 2008 (1.2)" fetchlog(1) "fetchlog documentation"
+.SH NAME
+fetchlog \- fetch and convert new messages of a logfile
+.SH SYNOPSIS
+.B fetchlog
+.RB \-f
+.I first:last:len:conv
+.I logfile
+.I bookmarkfile
+[
+.I pattern ..
+]
+.PP
+.B fetchlog
+.RB \-F
+.I first:last:len:conv
+.I logfile
+.I bookmarkfile
+[
+.I pattern ..
+]
+.PP
+.B fetchlog
+.RB [ \-h | \-V ]
+.PP
+.SH DESCRIPTION
+The 
+.I fetchlog 
+utility displays the last new messages of a logfile. It is 
+similar like 
+.IR tail (1) 
+but offers some extra functionality for output
+formatting. To show only the new messages appeared since the last call
+.I fetchlog 
+uses a bookmark to remember which messages have been fetched.
+.LP
+.I fetchlog 
+scans backwards 
+.I logfile
+and collects all messages, optionally only those matching any of the 
+given regex-style patterns. Then
+.I fetchlog 
+converts found message lines for output. 
+It stops scanning when one of these
+conditions become true: The bookmark from 
+.I bookmarkfile
+is reached, or 
+.I len
+characters
+are ready for output, or an error occurs. 
+.I fetchlog
+knows about rotated and uncompressed logfiles and continues scanning in 
+rotated logfiles by appending '.0', if that file does not exist '.1', then 
+upto '.9' to 
+.I logfile
+when scanning in rotated logfiles. Scanning stops without error when a 
+rotated logfile does not exist. 
+.LP
+.SH "OPTIONS"
+.TP
+.BI \-f
+do not update bookmark in
+.I bookmarkfile.
+.TP
+.BI \-F
+update bookmark in
+.I bookmarkfile
+: set bookmark to the very last line fetched from
+.I logfile
+.TP
+.BI first
+The first column of text 
+.I fetchlog 
+will read from
+.I logfile.
+Lines shorter than 
+.I first
+will be show up as a single newline. The column count starts with 1.
+.TP
+.BI last
+The maximum last column 
+.I fetchlog
+will read from 
+.I logfile.
+Lines longer than 
+.I last
+will be cut off and a `~` will be set at column
+.I last
+for output. The column count starts with 1.
+.TP
+.BI len
+The maximum number of characters
+.I fetchlog
+will output. If more than
+.I len
+characters are available after cutting and conversion, the first line
+put out will start with '...'. 
+.TP
+.BI conv
+Conversion: one ore more of characters 'bpsno3'.
+.IP
+.B b
+[brackets] convert '<' and '>' to '(' and ')' for safe HTML output.
+.IP
+.B p
+[percent] convert '%'  to 'p' for safe 
+.IR printf (1)
+output.
+.IP
+.B s
+[shell] convert '$', '^', and the three quotes (backquote, doublequote, singlequote) and '|' to '_' and '\\' to '/'. This conversion is useful when passing the 
+result of 
+.I fetchlog
+to a shell command as a parameter.
+.IP
+.B n
+[newline] convert newline characters to '\\n' sequence to get a single 
+line of output. 
+.IP
+.B o
+[ok message] Show 'OK: no messages'
+if no new messages are available for output.
+.IP
+.B 3
+[Nagios3] output in multiline format required for plugins since Nagios3.
+.TP
+.BI logfile
+Absolute path to the unrotated logfile to fetch data from. The user
+needs read access to
+.I logfile.
+.TP
+.BI bookmarkfile
+Absolute path to the file holding the bookmark. The user needs read
+access to the file when using option 
+.B \-f
+and write access plus permission to create files in the directory of
+.I bookarkfile
+when using option
+.B \-F
+(update bookmark).
+.IP
+If 
+.I bookmarkfile 
+does not exist 
+.I fetchlog 
+assumes an infinite old bookmark.
+.TP
+.BI pattern
+A extended regular expression pattern, see
+.IR re_format (7) 
+for details. If one or more 
+.I pattern
+are defined, 
+.I fetchlog
+will only pick lines where any of these 
+.I pattern
+match. Pattern matching is done after trimming the lines with respect to
+.I first
+and
+.I last
+and before any conversions takes place. In other words: pattern matching
+operates on data that 
+.I fetchlog 
+shows when no conversion is set.
+.TP
+.TP
+.BI \-h
+print help message
+.TP
+.BI \-V
+print version
+.LP
+.SH "MULTIPLE FETCHING"
+Fetching the same logfile with different bookmarks works without
+problem. Simultanously fetching with option 
+.B \-F
+(update mode) using the same bookmark file works too, but unpredictable 
+results will occur. For safety reasons
+.I bookmarkfile 
+will never be opened for writing directly, instead a temporary file
+will be used and renamed to 
+.I bookmarkfile 
+when writing has finished. 
+.LP
+.SH "PERFORMANCE"
+Before opening logfiles for scanning 
+.I fetchlog
+first checks the modification time of
+.I logfile
+and compares this time with the modification time stored in
+.I bookmarkfile.
+If  both timestamps are the same then
+.I fetchlog
+exits with 0 (no messages). 
+Otherwise the logfile(s) get mapped to memory step by step
+and are scanned backwards line by line until one of the end conditions
+become true. 
+.I fetchlog
+uses the logfiles inode to distinguish different logs.
+.LP
+.SH "NAGIOS"
+.I fetchlog
+may be used as a local plugin for the 
+.I Nagios 
+network monitoring system to monitor a local logfile. It 
+follows the calling convention for Nagios plugins if at least conversions
+.B on
+are set and 
+.I len
+is 'short' enough for Nagios (330 prior to Nagios 3, 4000 since Nagios 3).
+It is recommended to use conversion
+.B s
+also because shell metacharacters in fetched messages may confuse 
+Nagios' notification system. 
+
+Nagios 3 introduces a new interface for plugins
+sending out multiline output as fetchlog does. Even with conversion 'n' Nagios
+reads this as a multiline message. To be compatible with Nagios 3 plugin 
+format enable conversion '3' also. Output format is then: 
+SHORT_MESSAGE|\\nMESSAGE_LINE_1\\n...\\nMESSAGE_LINE_N where 
+SHORT_MESSAGE will be the last line fetched MESSAGE_LINE_N. Please see 
+README.Nagios for details.
+.LP
+When using 
+.I fetchlog
+as a local plugin for Nagios then exit status is as follows:
+.TP
+.BI OK 
+No new messages in 
+.I logfile 
+where found. The single line 'OK: no messages' will be send to stdout.
+.TP
+.BI WARNING 
+.I fetchlog
+detected an internal error while fetching. A one line error message starting
+with 'ERROR: fetchlog:' is send to stdout.
+.TP
+.BI CRITICAL 
+New messages in 
+.I logfile 
+where found. A single line with the last new messages will be send to
+stdout.
+.TP
+.BI UNKNOWN 
+.I fetchlog
+was called with wrong parameters. A multiline usage message is send 
+to stdout.
+.LP
+.I Nagios
+can monitor remote logfiles together with NET-SNMP and
+.I fetchlog 
+using the check-snmp plugin.
+Please read the README files coming with fetchlog how to setup this.
+.LP
+.SH "SNMP"
+The motivation for 
+.I fetchlog
+was to create a helper tool for NET-SNMP's 
+.I snmpd 
+to enable monitoring of remote kernel syslogs using SNMP. If configured
+properly, 
+.I snmpd 
+replies to a specific SNMP request with the output of an external helper
+program. With 
+.I fetchlog
+using update mode 
+.B \-F 
+and conversions 
+.B on
+one can peek at a remote syslog file and gets either 'OK: no messages' 
+or one line with the new syslog messages appeared since the last SNMP request. 
+.LP
+Because
+of some limitiations of SNMP itself and the monitoring applications
+using SNMP, the length of the SNMP reply must not exceed a specific
+size. To ease the integration of SNMP in monitoring software it 
+is useful to have the SNMP reply only consist of a single line of text 
+rather than multiple lines.
+.LP
+.SH "COMPRESSING OUTPUT"
+The syslog messages fetched can be compressed by increasing 
+.I first
+to skip the timestamp and host entry from syslog.
+Lowering 
+.I last
+gives even more compression for long syslog lines. As a result one
+gets a very short message that gives an idea of what is going wrong.
+.LP
+.SH "DIAGNOSTICS"
+.I fetchlog
+sends all output and error messages to stdout. Exit codes:
+.TP
+.BI 0
+No new messages in 
+.I logfile 
+were found. If conversion
+.I o
+is set, the single line 'OK: no messages' will be send to stdout.
+.TP
+.BI 1
+An internal error in
+.I fetchlog 
+occured. A one line error message will be send to
+stdout. The error message starts with 'ERROR: fetchlog:' and shows
+detailed information about what went wrong. Length limitation by parameter
+.I len 
+is applied, if an error message is too long the last part will
+be cut off and a '~' is appended.
+.TP
+.BI 2
+New messages in
+.I logfile
+were found. The new messages will be send to stdout. If conversion
+.I n
+is set, a single line of text is send, else zero or more lines of 
+converted syslog messages are send.
+.TP
+.BI 3
+.I fetchlog 
+was called with wrong parameters, a multiline usage message is print to stdout.
+.LP
+Note: Since version 0.93 the meanings of exit code 1 and 2
+have been exchanged. 
+.LP
+.SH "AUTHOR"
+Alexander Haderer, LoeScap Technology GmbH, Berlin - Germany
+.LP
+.SH "SEE ALSO"
+.IR tail (1),
+.IR cat (1),
+.IR head (1),
+.IR sed (1),
+.IR re_format (7),
+.IR syslogd (8),
+.IR newsyslog (8)
+.LP
+NET-SNMP - Various tools relating to the Simple Network Management
+Protocol SNMP (NET-SNMP: formerly known as UCD-SNMP)
+.br
+http://www.net-snmp.org
+.LP
+Nagios - A Network monitoring system
+.br
+http://www.nagios.org
+.LP
+Nagios Plugins - Plugins for Nagios
+.br
+http://nagiosplug.sourceforge.net
+.LP
+fetchlog homepage - download, support and bugtracking
+.br
+http://fetchlog.sourceforge.net
+.LP
+.SH "BUGS"
+Bookmarkfiles are not portable across plattforms or fetchlog versions.
+.LP
+Logfiles are expected not to shrink.
+.LP
+.I fetchlog
+does not work with compressed logfiles.
+.LP
+Fetching when logfile rotation takes place may result in some messages 
+to appear twice.
+.LP
+If an regex error occurs during pattern matching this error is silently
+ignored and will be handled as non-match.
+.LP
+.SH "LEGAL"
+Nagios is a registered trademark of Ethan Galstad.
+.LP
+.\" end of file

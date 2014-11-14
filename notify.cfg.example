@@ -1,0 +1,23 @@
+##########################################################################
+#
+# notify.cfg.example -- new command for mailing all lines of multiline messaeges
+#
+# intallation: if you use nagios 3 replace the original notify-service-by-email
+# command (defined in commands.cfg) with this one here. The original one does
+# not send out mulitple lines (extra result defined in $LONGSERVICEOUTPUT$).
+#
+# (C) 2010 Alexander Haderer
+#
+# cvs:    $Id: notify.cfg.example,v 1.1 2010/06/18 18:17:47 afrika Exp $
+# 
+##########################################################################
+
+# 'notify-service-by-email' command definition
+#
+# Originalversion, + long service output
+#
+define command{
+	command_name	notify-service-by-email
+	command_line	/usr/bin/printf "%b" "Type   : $NOTIFICATIONTYPE$\nHost   : $HOSTNAME$ ($HOSTALIAS$) / $HOSTADDRESS$\nDate   : $LONGDATETIME$\nService: $SERVICEDESC$\n\nMessage:  $SERVICEOUTPUT$\n\nLong: \n$LONGSERVICEOUTPUT$\n" | /usr/bin/mail -s '$HOSTNAME$/$SERVICEDESC$ is $SERVICESTATE$' $CONTACTEMAIL$ 
+}
+

@@ -1,0 +1,1226 @@
+#!/bin/sh
+#
+# test-all: test fetchlog 
+#
+# 28 Jun 2010		Alexander Haderer	LoeScap Technology GmbH
+#
+# NOTE: This test-script has been developed under FreeBSD and was not tested
+# 	on other platforms
+#
+# License: like fetchlog
+#
+
+set +x	# show code
+set -e	# -e : stop on error
+
+wd=$(pwd)		# working dir
+logfile=${wd}/test.log	# logfile
+bm=/tmp/fetchlog.bm	# bookmarkfile
+version=1.4		# fetchlog version
+
+usage_msg="fetchlog - fetch the last new log messages - version ${version} usage 1: fetchlog -f firstcol:lastcol:len:conv logfile bmfile"
+###############################################################################
+# ecpect  testname   expected-exitcode   expected-message   command + options
+#
+# checks results and terminate on mismatch
+#
+expect() 
+{
+    testname=$1
+    shift
+    expexit=$1
+    shift
+    expmsg=$1
+    shift
+    command="$*"
+    echo "------------------------------------------------------------------"
+    echo "testname: ${testname}"
+    echo "command : ${command}"
+    set +e	# ignore error
+    realmsg=$(${command})
+    realexit=$?
+    set -e	# stop on  error
+    # shorten exitcode 3 msg to 1st 118 char, because we can't handle all the 
+    # meta characters in usage message
+    if [ ${realexit} -eq 3  ]; then
+	realmsg=$(echo ${realmsg} | head -c 118 )
+    fi
+    if [ ${expexit} -ne ${realexit} -o "${expmsg}x" != "${realmsg}x" ]; then
+	echo "result  : FAILED"
+	echo " "
+        echo "  exitcode expected: ${expexit}"
+        echo "  exitcode got     : ${realexit}"
+	echo " "
+        echo "  message expected : >${expmsg}<"
+       	echo "  message got      : >${realmsg}<"
+	echo " "
+	echo "test-all FAILED to complete"
+	exit 1;
+    fi
+    echo "result  : ok"
+
+}
+
+###############################################################################
+# rotate logfiles
+#
+rotate_logs()
+{
+    rm -f ${logfile}.3
+    if [ -e ${logfile}.2 ]; then mv ${logfile}.2 ${logfile}.3; fi
+    if [ -e ${logfile}.1 ]; then mv ${logfile}.1 ${logfile}.2; fi
+    if [ -e ${logfile}.0 ]; then mv ${logfile}.0 ${logfile}.1; fi
+    if [ -e ${logfile}   ]; then mv ${logfile}   ${logfile}.0; fi
+    touch ${logfile}
+
+}
+
+###############################################################################
+# unlink logfiles
+#
+unlink_logs() 
+{
+    rm -f ${logfile}
+    rm -f ${logfile}.0
+    rm -f ${logfile}.1
+    rm -f ${logfile}.2
+    rm -f ${logfile}.3
+}
+
+#
+# prepare to run
+#
+if [ -e ${bm} ]; then
+    if ! rm -f ${bm}; then
+	echo "unlinking bookmark '${bm}' failed"
+	echo "test-all FAILED to start"
+	exit 1;
+    fi
+else
+    if ! touch  ${bm}; then
+	echo "creation of bookmark '${bm}' failed"
+	echo "test-all FAILED to start"
+	exit 1;
+    fi
+    rm -f ${bm}
+fi
+
+#
+# do testing
+#
+
+unlink_logs
+
+###########################################################################
+# command line param checking
+###########################################################################
+
+expect "empty call" \
+	3 \
+	"${usage_msg}" \
+	./fetchlog 
+
+expect "wrong call 1 param" \
+	3 \
+	"${usage_msg}" \
+	./fetchlog a
+
+expect "wrong call 2 param" \
+	3 \
+	"${usage_msg}" \
+	./fetchlog a b
+
+expect "wrong call 3 param" \
+	3 \
+	"${usage_msg}" \
+	./fetchlog a b c
+
+
+expect "wrong call 4 param" \
+	3 \
+	"${usage_msg}" \
+	./fetchlog a b c d
+
+
+expect "wrong call 5 param" \
+	3 \
+	"${usage_msg}" \
+	./fetchlog a b c d e
+
+
+expect "wrong call 6 param" \
+	3 \
+	"${usage_msg}" \
+	./fetchlog a b c d e f
+
+expect "call for version" \
+	3 \
+	"fetchlog version ${version}" \
+	./fetchlog -V
+
+
+# ######################################################
+# wrong call
+
+expect "wrong call 1" \
+	3 \
+	"${usage_msg}" \
+	./fetchlog -f ::: file bookmark 
+
+
+expect "wrong call 2" \
+	3 \
+	"${usage_msg}" \
+	./fetchlog -f 1:100:1000: file bookmark 
+
+
+expect "wrong call 3" \
+	3 \
+	"${usage_msg}" \
+	./fetchlog -X 1:100:1000: /file /bookmark 
+
+# ######################################################
+# wrong param (syntax)
+
+expect "param column + conv syntax 1" \
+	3 \
+	"ERROR: fetchlog: invalid parameter: firstcol, lastcol, len or conv" \
+	./fetchlog -f a:50:200: ${logfile} ${bm}
+
+expect "param column + conv syntax 2" \
+	3 \
+	"ERROR: fetchlog: invalid parameter: firstcol, lastcol, len or conv" \
+	./fetchlog -f 1:x:200: ${logfile} ${bm}
+
+expect "param column + conv syntax 3" \
+	3 \
+	"ERROR: fetchlog: invalid parameter: firstcol, lastcol, len or conv" \
+	./fetchlog -f 1:50:x: ${logfile} ${bm}
+
+expect "param column + conv syntax 4" \
+	3 \
+	"ERROR: fetchlog: invalid parameter: firstcol, lastcol, len or conv" \
+	./fetchlog -f 1:50:200:X ${logfile} ${bm}
+
+
+# ######################################################
+# wrong param (range)
+
+touch ${logfile}
+
+expect "param column range 1" \
+	3 \
+	"ERROR: fetchlog: out of range: firstcol, lastcol or len" \
+	./fetchlog -f 1:10:200: ${logfile} ${bm}
+
+expect "param column range 2" \
+	3 \
+	"ERROR: fetchlog: out of range: firstcol, lastcol or len" \
+	./fetchlog -f 50:1:200: ${logfile} ${bm}
+
+expect "param column range 3" \
+	3 \
+	"ERROR: fetchlog: out of range: firstcol, lastco~" \
+	./fetchlog -f 1:50:49: ${logfile} ${bm}
+
+expect "param column range 3 ok" \
+	0 \
+	"" \
+	./fetchlog -f 1:50:50: ${logfile} ${bm}
+
+expect "param column range 4a" \
+	0 \
+	"" \
+	./fetchlog -f 1:50:19999: ${logfile} ${bm}
+
+expect "param column range 4b" \
+	0 \
+	"" \
+	./fetchlog -f 1:50:20000: ${logfile} ${bm}
+
+expect "param column range 4c" \
+	3 \
+	"ERROR: fetchlog: out of range: firstcol, lastcol or len" \
+	./fetchlog -f 1:50:20001: ${logfile} ${bm}
+
+expect "param column range 5" \
+	3 \
+	"ERROR: fetchlog: out of range: firstcol, lastcol or len" \
+	./fetchlog -f 300:350:200: ${logfile} ${bm}
+
+expect "param column range 6a" \
+	0 \
+	"" \
+	./fetchlog -f 250:300:200: ${logfile} ${bm}
+
+expect "param column range 6b" \
+	3 \
+	"ERROR: fetchlog: out of range: firstcol, lastcol or len" \
+	./fetchlog -f 250:301:200: ${logfile} ${bm}
+
+
+# ######################################################
+# wrong param (conv)
+
+expect "param conv 1" \
+	0 \
+	"" \
+	./fetchlog -f 1:50:200: ${logfile} ${bm}
+
+expect "param conv 2" \
+	0 \
+	"" \
+	./fetchlog -f 1:50:200:s ${logfile} ${bm}
+
+expect "param conv 3" \
+	0 \
+	"" \
+	./fetchlog -f 1:50:200:n ${logfile} ${bm}
+
+expect "param conv 4" \
+	0 \
+	"OK: no messages" \
+	./fetchlog -f 1:50:200:o ${logfile} ${bm}
+
+expect "param conv 5" \
+	0 \
+	"" \
+	./fetchlog -f 1:50:200:b ${logfile} ${bm}
+
+expect "param conv 6" \
+	0 \
+	"OK: no messages" \
+	./fetchlog -f 1:50:200:3 ${logfile} ${bm}
+
+expect "param conv 7" \
+	0 \
+	"" \
+	./fetchlog -f 1:50:200:p ${logfile} ${bm}
+
+expect "param conv 8" \
+	0 \
+	"OK: no messages" \
+	./fetchlog -f 1:50:200:snob3p ${logfile} ${bm}
+
+expect "param conv 9" \
+	0 \
+	"" \
+	./fetchlog -f 1:50:200:sssss ${logfile} ${bm}
+
+expect "param conv 10" \
+	3 \
+	"ERROR: fetchlog: invalid parameter: firstcol, lastcol, len or conv" \
+	./fetchlog -f 1:50:200:snob3ps ${logfile} ${bm}
+
+# ######################################################
+# wrong param: filenames, broken bookmarks (exitcode 1 stuff)
+
+expect "param bookmark/logfile 1" \
+	1 \
+	"ERROR: fetchlog: open: ${logfile}x: No such file or directory" \
+	./fetchlog -f 1:50:200: ${logfile}x ${bm}
+
+touch ${bm}
+expect "param bookmark/logfile 2" \
+	1 \
+	"ERROR: fetchlog: no file/wrong size: ${bm}" \
+	./fetchlog -f 1:50:200: ${logfile} ${bm}
+
+echo "ABC124" > ${bm}
+expect "param bookmark/logfile 3" \
+	1 \
+	"ERROR: fetchlog: no file/wrong size: ${bm}" \
+	./fetchlog -f 1:50:200: ${logfile} ${bm}
+rm -f ${bm}
+expect "param bookmark/logfile 4" \
+	1 \
+	"ERROR: fetchlog: no file/wrong size: /usr" \
+	./fetchlog -f 1:50:200: ${logfile} /usr 
+
+
+# ######################################################
+# fetching: rotated logs without regex
+
+unlink_logs
+rm -f ${bm}
+echo "Zeile 1" > ${logfile}
+
+expect "fetching rotated w/o regex 1" \
+	2 \
+	"Zeile 1" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm}
+
+expect "fetching rotated w/o regex 2" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm}
+
+rotate_logs
+
+expect "fetching rotated w/o regex 3" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm}
+
+rotate_logs
+rotate_logs
+
+expect "fetching rotated w/o regex 5" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm}
+
+echo "Zeile 2" >> ${logfile}
+echo "Zeile 3" >> ${logfile}
+rotate_logs
+
+emsg="Zeile 2
+Zeile 3"
+
+expect "fetching rotated w/o regex 6" \
+	2 \
+	"${emsg}" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm}
+
+echo "Zeile 4" >> ${logfile}
+echo "Zeile 5" >> ${logfile}
+rotate_logs
+rotate_logs
+echo "Zeile 6" >> ${logfile}
+
+emsg="Zeile 4
+Zeile 5
+Zeile 6"
+
+expect "fetching rotated w/o regex 7" \
+	2 \
+	"${emsg}" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm}
+
+expect "fetching rotated w/o regex 8" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm}
+
+expect "fetching nothing from rotated w/o regex 1" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm}
+
+expect "fetching nothing from rotated w/o regex 2" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200:snbp ${logfile} ${bm}
+
+expect "fetching nothing from rotated w/o regex 3" \
+	0 \
+	"OK: no messages" \
+	./fetchlog -F 1:50:200:o ${logfile} ${bm}
+
+expect "fetching nothing from rotated w/o regex 4" \
+	0 \
+	"OK: no messages" \
+	./fetchlog -F 1:50:200:3 ${logfile} ${bm}
+
+echo >> ${logfile}
+
+expect "fetching newline from rotated w/o regex 1" \
+	2 \
+	"" \
+	./fetchlog -f 1:50:200: ${logfile} ${bm}
+
+expect "fetching newline from rotated w/o regex 2" \
+	2 \
+	"" \
+	./fetchlog -f 1:50:200:sobp ${logfile} ${bm}
+
+expect "fetching newline from rotated w/o regex 3" \
+	2 \
+	"\n\n" \
+	./fetchlog -f 1:50:200:n ${logfile} ${bm}
+
+expect "fetching newline from rotated w/o regex 4" \
+	2 \
+	"|\n\n" \
+	./fetchlog -f 1:50:200:3 ${logfile} ${bm}
+
+
+
+# ######################################################
+# fetching: rotated logs with regex
+
+unlink_logs
+rm -f ${bm}
+echo "Zeile 1 pattern" >> ${logfile}
+
+expect "fetching rotated with regex 1" \
+	2 \
+	"Zeile 1 pattern" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm} pattern
+
+expect "fetching rotated with regex 2" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm} pattern
+
+echo "Zeile 2 no-patt" >> ${logfile}
+
+expect "fetching rotated with regex 2" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm} pattern
+
+rotate_logs
+
+expect "fetching rotated with regex 3" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm} pattern
+
+rotate_logs
+rotate_logs
+
+expect "fetching rotated with regex 5" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm} pattern
+
+echo "Zeile 3 no-patt" >> ${logfile}
+echo "Zeile 4 pattern" >> ${logfile}
+echo "Zeile 5 no-patt" >> ${logfile}
+
+expect "fetching rotated with regex 6" \
+	2 \
+	"Zeile 4 pattern" \
+	./fetchlog -f 1:50:200: ${logfile} ${bm} pattern
+
+rotate_logs
+
+expect "fetching rotated with regex 7" \
+	2 \
+	"Zeile 4 pattern" \
+	./fetchlog -f 1:50:200: ${logfile} ${bm} pattern
+
+rotate_logs
+rotate_logs
+
+expect "fetching rotated with regex 8" \
+	2 \
+	"Zeile 4 pattern" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm} pattern
+
+
+expect "fetching rotated with regex 9" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm} pattern
+
+echo "Zeile 6 no-patt" >> ${logfile}
+
+expect "fetching rotated with regex 10" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm} pattern
+
+echo "Zeile 7 no-patt" >> ${logfile}
+
+expect "fetching nothing from rotated with regex 1" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm} pattern
+
+echo "Zeile 8 no-patt" >> ${logfile}
+
+expect "fetching nothing from rotated with regex 2" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200:snbp ${logfile} ${bm} pattern
+
+echo "Zeile 9 no-patt" >> ${logfile}
+
+expect "fetching nothing from rotated with regex 3" \
+	0 \
+	"OK: no messages" \
+	./fetchlog -F 1:50:200:o ${logfile} ${bm} pattern
+
+echo "Zeile 10 no-patt" >> ${logfile}
+
+expect "fetching nothing from rotated with regex 4" \
+	0 \
+	"OK: no messages" \
+	./fetchlog -F 1:50:200:3 ${logfile} ${bm} pattern
+
+
+# ######################################################
+# fetching: rotated logs starting at .1
+
+unlink_logs
+rm -f ${bm}
+echo "Zeile a" >> ${logfile}
+
+expect "fetching rotated logs starting at .1 1" \
+	2 \
+	"\nZeile a\n" \
+	./fetchlog -f 1:50:200:n ${logfile} ${bm}
+
+rotate_logs
+echo "Zeile b" >> ${logfile}
+
+expect "fetching rotated logs starting at .1 2" \
+	2 \
+	"\nZeile a\nZeile b\n" \
+	./fetchlog -f 1:50:200:n ${logfile} ${bm}
+
+rotate_logs
+echo "Zeile c" >> ${logfile}
+
+expect "fetching rotated logs starting at .1 3" \
+	2 \
+	"\nZeile a\nZeile b\nZeile c\n" \
+	./fetchlog -f 1:50:200:n ${logfile} ${bm}
+
+rotate_logs
+echo "Zeile d" >> ${logfile}
+
+expect "fetching rotated logs starting at .1 4" \
+	2 \
+	"\nZeile a\nZeile b\nZeile c\nZeile d\n" \
+	./fetchlog -f 1:50:200:n ${logfile} ${bm}
+
+rotate_logs
+echo "Zeile e" >> ${logfile}
+
+expect "fetching rotated logs starting at .1 5" \
+	2 \
+	"\nZeile a\nZeile b\nZeile c\nZeile d\nZeile e\n" \
+	./fetchlog -f 1:50:200:n ${logfile} ${bm}
+
+mv ${logfile}.0 ${logfile}.0.off
+
+expect "fetching rotated logs starting at .1 6" \
+	2 \
+	"\nZeile a\nZeile b\nZeile c\nZeile e\n" \
+	./fetchlog -f 1:50:200:n ${logfile} ${bm}
+
+mv ${logfile}.0.off ${logfile}.0
+mv ${logfile}.1 ${logfile}.1.off
+
+expect "fetching rotated logs starting at .1 7" \
+	2 \
+	"\nZeile d\nZeile e\n" \
+	./fetchlog -f 1:50:200:n ${logfile} ${bm}
+
+mv ${logfile}.1.off ${logfile}.1
+
+
+# update bookmark
+expect "fetching rotated logs starting at .1 8" \
+	2 \
+	"\nZeile a\nZeile b\nZeile c\nZeile d\nZeile e\n" \
+	./fetchlog -F 1:50:200:n ${logfile} ${bm}
+
+# ######################################################
+# fetching: conversion
+
+rotate_logs
+
+#### newline conversion
+
+echo >> ${logfile}
+
+expect "fetching newline with conversion 1" \
+	2 \
+	"" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm}
+
+echo >> ${logfile}
+
+expect "fetching newline with conversion 2" \
+	2 \
+	"\n\n" \
+	./fetchlog -F 1:50:200:n ${logfile} ${bm}
+
+echo >> ${logfile}
+
+expect "fetching newline with conversion 3" \
+	2 \
+	"|\n\n" \
+	./fetchlog -F 1:50:200:3 ${logfile} ${bm}
+
+expect "fetching nothing with conversion 1" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm}
+
+expect "fetching nothing with conversion 2" \
+	0 \
+	"" \
+	./fetchlog -F 1:50:200:n ${logfile} ${bm}
+
+expect "fetching nothing with conversion 3" \
+	0 \
+	"OK: no messages" \
+	./fetchlog -F 1:50:200:o ${logfile} ${bm}
+
+expect "fetching nothing with conversion 4" \
+	0 \
+	"OK: no messages" \
+	./fetchlog -F 1:50:200:3 ${logfile} ${bm}
+
+
+#### percent conversion
+
+echo "abc%123%%xyz" >> ${logfile}
+
+expect "fetching percent with conversion 1" \
+	2 \
+	"abc%123%%xyz" \
+	./fetchlog -f 1:50:200: ${logfile} ${bm}
+
+expect "fetching percent with conversion 2" \
+	2 \
+	"abc%123%%xyz" \
+	./fetchlog -f 1:50:200:s ${logfile} ${bm}
+
+expect "fetching percent with conversion 3" \
+	2 \
+	"\nabc%123%%xyz\n" \
+	./fetchlog -f 1:50:200:n ${logfile} ${bm}
+
+expect "fetching percent with conversion 4" \
+	2 \
+	"abc%123%%xyz" \
+	./fetchlog -f 1:50:200:o ${logfile} ${bm}
+
+expect "fetching percent with conversion 5" \
+	2 \
+	"abc%123%%xyz" \
+	./fetchlog -f 1:50:200:b ${logfile} ${bm}
+
+expect "fetching percent with conversion 6" \
+	2 \
+	"abcp123ppxyz" \
+	./fetchlog -f 1:50:200:p ${logfile} ${bm}
+
+expect "fetching percent with conversion 7" \
+	2 \
+	"abc%123%%xyz|\nabc%123%%xyz\n" \
+	./fetchlog -f 1:50:200:3 ${logfile} ${bm}
+
+# update bookmark
+expect "fetching percent with conversion 8" \
+	2 \
+	"abc%123%%xyz" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm}
+
+
+#### bracket <> conversion
+
+echo "a<>b" >> ${logfile}
+
+expect "fetching bracket with conversion 1" \
+	2 \
+	"a<>b" \
+	./fetchlog -f 1:50:200: ${logfile} ${bm}
+
+expect "fetching bracket with conversion 2" \
+	2 \
+	"a<>b" \
+	./fetchlog -f 1:50:200:s ${logfile} ${bm}
+
+expect "fetching bracket with conversion 3" \
+	2 \
+	"\na<>b\n" \
+	./fetchlog -f 1:50:200:n ${logfile} ${bm}
+
+expect "fetching bracket with conversion 4" \
+	2 \
+	"a<>b" \
+	./fetchlog -f 1:50:200:o ${logfile} ${bm}
+
+expect "fetching bracket with conversion 5" \
+	2 \
+	"a()b" \
+	./fetchlog -f 1:50:200:b ${logfile} ${bm}
+
+expect "fetching bracket with conversion 6" \
+	2 \
+	"a<>b" \
+	./fetchlog -f 1:50:200:p ${logfile} ${bm}
+
+expect "fetching bracket with conversion 7" \
+	2 \
+	"a<>b|\na<>b\n" \
+	./fetchlog -f 1:50:200:3 ${logfile} ${bm}
+
+expect "fetching bracket with conversion 7a" \
+	2 \
+	"a()b|\na()b\n" \
+	./fetchlog -f 1:50:200:3b ${logfile} ${bm}
+
+# update bookmark
+expect "fetching bracket with conversion 8" \
+	2 \
+	"a<>b" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm}
+
+
+
+#### shell meta conversion
+# Note: we don't test for double quote, because the shell won't let us do
+
+msg="do\$ sq' bt\` ha^ bs\\ pi|" 
+echo $msg >> ${logfile}
+
+expect "fetching shell meta with conversion 1" \
+	2 \
+	"$msg" \
+	./fetchlog -f 1:50:200: ${logfile} ${bm}
+
+expect "fetching shell meta with conversion 2" \
+	2 \
+	"do_ sq_ bt_ ha_ bs/ pi_"  \
+	./fetchlog -f 1:50:200:s ${logfile} ${bm}
+
+expect "fetching shell meta with conversion 3" \
+	2 \
+	"\n$msg\n" \
+	./fetchlog -f 1:50:200:n ${logfile} ${bm}
+
+expect "fetching shell meta with conversion 4" \
+	2 \
+	"$msg" \
+	./fetchlog -f 1:50:200:o ${logfile} ${bm}
+
+expect "fetching shell meta with conversion 5" \
+	2 \
+	"$msg" \
+	./fetchlog -f 1:50:200:b ${logfile} ${bm}
+
+expect "fetching shell meta with conversion 6" \
+	2 \
+	"$msg" \
+	./fetchlog -f 1:50:200:p ${logfile} ${bm}
+
+expect "fetching shell meta with conversion 7" \
+	2 \
+	"$msg|\n$msg\n" \
+	./fetchlog -f 1:50:200:3 ${logfile} ${bm}
+
+expect "fetching shell meta with conversion 7a" \
+	2 \
+	"$msg|\n$msg\n" \
+	./fetchlog -f 1:50:200:3b ${logfile} ${bm}
+
+# update bookmark
+expect "fetching shell meta with conversion 8" \
+	2 \
+	"$msg" \
+	./fetchlog -F 1:50:200: ${logfile} ${bm}
+
+
+# ######################################################
+# fetching: columns without regex
+
+rotate_logs
+
+echo "123456789a123456789b123456789c123456789d123456789e123456789f123456789g" \
+	>> ${logfile}
+
+# one line
+expect "fetching: columns w/o regex one line 1" \
+    2 \
+    "123456789a123456789b123456789c123456789d123456789e123456789f123456789g" \
+    ./fetchlog -f 1:80:200: ${logfile} ${bm}
+
+expect "fetching: columns w/o regex one line 2" \
+    2 \
+    "123456789a123456789~" \
+    ./fetchlog -f 1:20:200: ${logfile} ${bm}
+
+expect "fetching: columns w/o regex one line 3" \
+    2 \
+    "b123456789c123456789~" \
+    ./fetchlog -f 20:40:200: ${logfile} ${bm}
+
+expect "fetching: columns w/o regex one line 4" \
+    2 \
+    "f123456789g" \
+    ./fetchlog -f 60:80:200: ${logfile} ${bm}
+
+expect "fetching: columns w/o regex one line 5" \
+    2 \
+    "" \
+    ./fetchlog -f 80:100:200: ${logfile} ${bm}
+
+expect "fetching: columns w/o regex one line 6" \
+    2 \
+    "\n\n" \
+    ./fetchlog -f 80:100:200:n ${logfile} ${bm}
+
+
+# two lines
+
+echo "123456789a123456789b123456789c" \
+	>> ${logfile}
+
+expect "fetching: columns w/o regex two line 1" \
+    2 \
+    "123456789a123456789b123456789c123456789d123456789e123456789f123456789g
+123456789a123456789b123456789c" \
+    ./fetchlog -f 1:80:200: ${logfile} ${bm}
+
+expect "fetching: columns w/o regex two line 2" \
+    2 \
+    "123456789a123456789~
+123456789a123456789~" \
+    ./fetchlog -f 1:20:200: ${logfile} ${bm}
+
+expect "fetching: columns w/o regex two line 3" \
+    2 \
+    "b123456789c123456789~
+b123456789c" \
+    ./fetchlog -f 20:40:200: ${logfile} ${bm}
+
+expect "fetching: columns w/o regex two line 4a" \
+    2 \
+    "f123456789g" \
+    ./fetchlog -f 60:80:200: ${logfile} ${bm}
+
+expect "fetching: columns w/o regex two line 4b" \
+    2 \
+    "\nf123456789g\n\n" \
+    ./fetchlog -f 60:80:200:n ${logfile} ${bm}
+
+expect "fetching: columns w/o regex two line 5" \
+    2 \
+    "" \
+    ./fetchlog -f 80:100:200: ${logfile} ${bm}
+
+expect "fetching: columns w/o regex two line 6" \
+    2 \
+    "\n\n\n" \
+    ./fetchlog -f 80:100:200:n ${logfile} ${bm}
+
+# update bookmark
+expect "fetching: columns w/o regex two line 7" \
+    2 \
+    "\n\n\n" \
+    ./fetchlog -F 80:100:200:n ${logfile} ${bm}
+
+
+
+# ######################################################
+# fetching: columns with regex
+
+rotate_logs
+
+#    "123456789a123456789b123456789c123456789d123456789e123456789f123456789g"
+echo "  PAT_A  a  PAT_B  b  PAT_C  c  line1  d  PAT_E  e  PAT_F  f  PAT_G  g" \
+	>> ${logfile}
+
+# one line
+expect "fetching: columns with regex one line 1" \
+    2 \
+    "  PAT_A  a  PAT_B  b  PAT_C  c  line1  d  PAT_E  e  PAT_F  f  PAT_G  g" \
+    ./fetchlog -f 1:80:200: ${logfile} ${bm} PAT_A
+
+expect "fetching: columns with regex one line 2" \
+    0 \
+    "" \
+    ./fetchlog -f 1:80:200: ${logfile} ${bm} PAT_X
+
+expect "fetching: columns with regex one line 3" \
+    0 \
+    "" \
+    ./fetchlog -f 20:80:200: ${logfile} ${bm} PAT_A
+
+expect "fetching: columns with regex one line 4" \
+    0 \
+    "" \
+    ./fetchlog -f 20:80:200: ${logfile} ${bm} PAT_B
+
+expect "fetching: columns with regex one line 5" \
+    2 \
+    "b  PAT_C  c  line1  d  PAT_E  e  PAT_F  f  PAT_G  g" \
+    ./fetchlog -f 20:80:200: ${logfile} ${bm} PAT_C
+
+
+
+expect "fetching: columns with regex one line 6" \
+    0 \
+    "" \
+    ./fetchlog -f 20:60:200: ${logfile} ${bm} PAT_A
+
+expect "fetching: columns with regex one line 7" \
+    0 \
+    "" \
+    ./fetchlog -f 20:60:200: ${logfile} ${bm} PAT_B
+
+expect "fetching: columns with regex one line 8" \
+    0 \
+    "" \
+    ./fetchlog -f 20:60:200: ${logfile} ${bm} PAT_G
+
+
+# multi line
+
+echo "  PAT_A  a  PAT_B  b  PAT_C  c  line2" >> ${logfile}
+echo "         a         b         c  line3  d  PAT_E  e  PAT_F  f  PAT_G  g" \
+	>> ${logfile}
+echo "         a         b         c  line4  d         e         f         g" \
+	>> ${logfile}
+
+expect "fetching: columns with regex multi line 1" \
+    2 \
+    "  PAT_A  a  PAT_B  b  PAT_C  c  line1  ~
+  PAT_A  a  PAT_B  b  PAT_C  c  line2" \
+    ./fetchlog -f 1:40:200: ${logfile} ${bm} PAT_A
+
+expect "fetching: columns with regex multi line 2" \
+    0 \
+    "" \
+    ./fetchlog -f 1:40:200: ${logfile} ${bm} PAT_G
+
+expect "fetching: columns with regex multi line 3" \
+    0 \
+    "" \
+    ./fetchlog -f 30:80:200: ${logfile} ${bm} PAT_A
+
+expect "fetching: columns with regex multi line 4" \
+    2 \
+    "c  line1  d  PAT_E  e  PAT_F  f  PAT_G  g
+c  line3  d  PAT_E  e  PAT_F  f  PAT_G  g" \
+    ./fetchlog -f 30:80:200: ${logfile} ${bm} PAT_G
+
+# update bookmark
+rotate_logs
+expect "fetching: columns with regex multi line 5" \
+    2 \
+    "c  line1  d  PAT_E  e  PAT_F  f  PAT_G  g
+c  line3  d  PAT_E  e  PAT_F  f  PAT_G  g" \
+    ./fetchlog -F 30:80:200: ${logfile} ${bm} PAT_G
+
+
+
+
+# ######################################################
+# fetching: multiple regex
+
+echo "line1 PAT_A PAT_B PAT_C" >> ${logfile}
+echo "line2 PAT_A            " >> ${logfile}
+echo "line3       PAT_B      " >> ${logfile}
+echo "line4             PAT_C" >> ${logfile}
+
+expect "fetching: columns with multiple regex 1" \
+    2 \
+    "line1 PAT_A PAT_B PAT_C
+line2 PAT_A            
+line3       PAT_B      " \
+    ./fetchlog -f 1:80:200: ${logfile} ${bm} PAT_A PAT_B
+
+expect "fetching: columns with multiple regex 2" \
+    2 \
+    "line1 PAT_A PAT_B PAT_C
+line2 PAT_A            
+line4             PAT_C" \
+    ./fetchlog -f 1:80:200: ${logfile} ${bm} PAT_A PAT_C
+
+expect "fetching: columns with multiple regex 3" \
+    2 \
+    "line1 PAT_A PAT_B PAT_C
+line2 PAT_A            " \
+    ./fetchlog -f 1:80:200: ${logfile} ${bm} PAT_A PAT_A
+
+expect "fetching: columns with multiple regex 4" \
+    2 \
+    "line1 PAT_A PAT_B PAT_C
+line4             PAT_C" \
+    ./fetchlog -f 1:80:200: ${logfile} ${bm} PAT_C PAT_X
+
+expect "fetching: columns with multiple regex 5" \
+    0 \
+    "" \
+    ./fetchlog -f 1:80:200: ${logfile} ${bm} PAT_X PAT_Y
+
+# update bookmark
+rotate_logs
+expect "fetching: columns with multiple regex 6" \
+    0 \
+    "" \
+    ./fetchlog -f 1:80:200: ${logfile} ${bm} PAT_X PAT_Y
+
+
+
+# ######################################################
+# fetching: fetchlen
+
+# 2 x 50 + 1 char
+echo "L 1 56789a123456789b123456789c123456789d123456789e"  >> ${logfile}
+echo "L 2 56789a123456789b123456789c123456789d123456789e"  >> ${logfile}
+
+expect "fetching fetchlen errormsg 1" \
+    3 \
+    "ERROR: fetchlog: out of range: firstcol, lastcol~" \
+    ./fetchlog -f 1:999:50: ${logfile} ${bm}
+
+expect "fetching fetchlen 1" \
+    2 \
+    "...56789a123456789b123456789c123456789d123456789e" \
+    ./fetchlog -f 1:50:50: ${logfile} ${bm}
+
+expect "fetching fetchlen 2" \
+    2 \
+    "... 56789a123456789b123456789c123456789d123456789e" \
+    ./fetchlog -f 1:50:51: ${logfile} ${bm}
+
+expect "fetching fetchlen 3" \
+    2 \
+    "...2 56789a123456789b123456789c123456789d123456789e" \
+    ./fetchlog -f 1:50:52: ${logfile} ${bm}
+
+expect "fetching fetchlen 4" \
+    2 \
+    "... 2 56789a123456789b123456789c123456789d123456789e" \
+    ./fetchlog -f 1:50:53: ${logfile} ${bm}
+
+expect "fetching fetchlen 5" \
+    2 \
+    "...L 2 56789a123456789b123456789c123456789d123456789e" \
+    ./fetchlog -f 1:50:54: ${logfile} ${bm}
+
+expect "fetching fetchlen 6" \
+    2 \
+    "...
+L 2 56789a123456789b123456789c123456789d123456789e" \
+    ./fetchlog -f 1:50:55: ${logfile} ${bm}
+
+expect "fetching fetchlen 7" \
+    2 \
+    "...e
+L 2 56789a123456789b123456789c123456789d123456789e" \
+    ./fetchlog -f 1:50:56: ${logfile} ${bm}
+
+
+expect "fetching fetchlen conv n 1" \
+    2 \
+    "\n... 2 56789a123456789b123456789c123456789d123456789e\n" \
+    ./fetchlog -f 1:50:57:n ${logfile} ${bm}
+
+expect "fetching fetchlen conv n 2" \
+    2 \
+    "\n...L 2 56789a123456789b123456789c123456789d123456789e\n" \
+    ./fetchlog -f 1:50:58:n ${logfile} ${bm}
+
+expect "fetching fetchlen conv n 3" \
+    2 \
+    "\n....L 2 56789a123456789b123456789c123456789d123456789e\n" \
+    ./fetchlog -f 1:50:59:n ${logfile} ${bm}
+
+expect "fetching fetchlen conv n 4" \
+    2 \
+    "\n...\nL 2 56789a123456789b123456789c123456789d123456789e\n" \
+    ./fetchlog -f 1:50:60:n ${logfile} ${bm}
+
+expect "fetching fetchlen conv n 5" \
+    2 \
+    "\n...e\nL 2 56789a123456789b123456789c123456789d123456789e\n" \
+    ./fetchlog -f 1:50:61:n ${logfile} ${bm}
+
+expect "fetching fetchlen conv n 6" \
+    2 \
+    "\n...9e\nL 2 56789a123456789b123456789c123456789d123456789e\n" \
+    ./fetchlog -f 1:50:62:n ${logfile} ${bm}
+
+# update bookmark
+rotate_logs
+expect "fetching fetchlen N" \
+    2 \
+    "...56789a123456789b123456789c123456789d123456789e" \
+    ./fetchlog -F 1:50:50: ${logfile} ${bm}
+
+# ######################################################
+# fetching: conversion '3'
+
+echo "L 1 56789a123456789b123456789c"  >> ${logfile}
+echo "L 2 56789a123456789b123456789c"  >> ${logfile}
+
+expect "fetching conversion 3  1" \
+    2 \
+    "L 2 56789a123456789b123456789c" \
+    ./fetchlog -f 1:50:60:3 ${logfile} ${bm}
+
+expect "fetching conversion 3  2" \
+    2 \
+    "L 2 56789a123456789b123456789c" \
+    ./fetchlog -f 1:50:67:3 ${logfile} ${bm}
+
+expect "fetching conversion 3  3" \
+    2 \
+    "L 2 56789a123456789b123456789c" \
+    ./fetchlog -f 1:50:68:3 ${logfile} ${bm}
+
+expect "fetching conversion 3  4" \
+    2 \
+    "L 2 56789a123456789b123456789c|\n...L 2 56789a123456789b123456789c\n" \
+    ./fetchlog -f 1:50:69:3 ${logfile} ${bm}
+
+expect "fetching conversion 3  5" \
+    2 \
+    "L 2 56789a123456789b123456789c|\n..\nL 2 56789a123456789b123456789c\n" \
+    ./fetchlog -f 1:50:70:3 ${logfile} ${bm}
+
+expect "fetching conversion 3  6" \
+    2 \
+    "L 2 56789a123456789b123456789c|\n...\nL 2 56789a123456789b123456789c\n" \
+    ./fetchlog -f 1:50:71:3 ${logfile} ${bm}
+
+expect "fetching conversion 3  7" \
+    2 \
+    "L 2 56789a123456789b123456789c|\n...c\nL 2 56789a123456789b123456789c\n" \
+    ./fetchlog -f 1:50:72:3 ${logfile} ${bm}
+
+expect "fetching conversion 3  8" \
+    2 \
+    "L 2 56789a123456789b12345678~|\n...~\nL 2 56789a123456789b12345678~\n" \
+    ./fetchlog -f 1:29:70:3 ${logfile} ${bm}
+
+expect "fetching conversion 3  9" \
+    2 \
+    "L 2 56789a123456789b123456789c|\n...56789a123456789b123456789c\nL 2 56789a123456789b123456789c\n" \
+    ./fetchlog -f 1:30:97:3 ${logfile} ${bm}
+
+expect "fetching conversion 3  10" \
+    2 \
+    "L 2 56789a123456789b123456789c|\nL 1 56789a123456789b123456789c\nL 2 56789a123456789b123456789c\n" \
+    ./fetchlog -f 1:30:98:3 ${logfile} ${bm}
+
+expect "fetching conversion 3  11" \
+    2 \
+    "L 2 56789a123456789b123456789c|\nL 1 56789a123456789b123456789c\nL 2 56789a123456789b123456789c\n" \
+    ./fetchlog -f 1:30:99:3 ${logfile} ${bm}
+
+expect "fetching conversion 3  12" \
+    2 \
+    "L 2 56789a123456789b123456789c|\nL 1 56789a123456789b123456789c\nL 2 56789a123456789b123456789c\n" \
+    ./fetchlog -f 1:30:100:3 ${logfile} ${bm}
+
+echo >> ${logfile}
+
+expect "fetching conversion 3  13" \
+    2 \
+    "|\nL 1 56789a123456789b123456789c\nL 2 56789a123456789b123456789c\n\n" \
+    ./fetchlog -f 1:30:100:3 ${logfile} ${bm}
+
+echo "bla" >> ${logfile}
+
+expect "fetching conversion 3  14" \
+    2 \
+    "bla|\nL 1 56789a123456789b123456789c\nL 2 56789a123456789b123456789c\n\nbla\n" \
+    ./fetchlog -f 1:30:100:3 ${logfile} ${bm}
+
+echo " "
+echo "test-all: all tests ok"
+echo " "
+unlink_logs
+exit 0

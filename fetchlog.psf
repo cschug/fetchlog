@@ -1,0 +1,44 @@
+description "fetchlog"
+copyright "GPL"
+product
+    tag fetchlog
+    description "Reads a file from where it left off last time"
+    revision 1.2
+    copyright "2002 .. 2008 Alexander Haderer (alexander.haderer@loescap.de)"
+    readme <README
+    machine_type *
+    os_name HP-UX
+    os_release ?.11.*
+    os_version *
+    directory /
+    is_locatable false
+    is_patch false
+    fileset
+        tag RUN
+        title fetchlog program itself
+        revision 1.6
+        machine_type *
+        os_name HP-UX
+        os_release ?.11.*
+        os_version *
+        is_patch false
+        is_sparse false
+        is_kernel false
+        is_reboot false
+        directory . = /usr/local/bin
+            file fetchlog
+    end
+    fileset
+        tag MAN
+        machine_type *
+        os_name HP-UX
+        os_release ?.11.*
+        os_version *
+        is_patch false
+        is_sparse false
+        is_kernel false
+        is_reboot false
+        directory . = /usr/local/man/man1
+            file fetchlog.1 
+    end 
+end 

@@ -1,0 +1,71 @@
+
+file:   CHANGES
+author: Alexander Haderer
+date:	26 Mar 2004
+
+
+                     C H A N G E S    f e t c h l o g    
+
+
+0.91	15 April 2002
+	- initial public release
+
+0.92	23 April 2002
+	- make calling conventions compatible to Netsaint plugins
+	- update README and man page:  Netsaint integration as plugin
+
+0.93	09 July 2002
+	- bugfix: conversion accidently took place multiple times. fixed
+	- bugfix/Extension: postprocessing the result of fetchlog with shell
+	  commands results in unexpected behaviour if the fetched message 
+	  contains shell metacharacters: '"`^$\ 
+	  Introduced the new conversion s to convert the above meta characters
+	  to _ and / respectively. 
+	  Netsaint's mail notification system is known to be affected from this
+	  bug. Netsaint users should upgrade to 0.93 and add conversion s to
+	  the fetchlog call.
+	- Change: Meaning of exitcodes 1 und 2 exchanged to make fetchlog
+	  more Netsaint plugin compatible. Added a compile-time option in
+	  Makefile to optionally make fetchlog return the pre-0.93 exitcodes.
+	- Doku updated.
+
+0.94	17 Dec 2002
+	- inserted CVS tags
+	- updated docs: Netsaint --> Nagios (TM)
+	- exit code -1 for 'UNKNOWN' now 3 to be Nagios/Posix compatible
+	  
+0.95 	18 Nov 2003
+	- removed compile option pre 0.93 exit codes
+	- no longer use copy of last line fetched to find bookmark location
+	- use inode to identify a (rotated) logfile instead
+	- handling of empty (and rotated) logfiles now correct
+
+1.0	26 Mar 2004
+	- added regex pattern matching: fetch only messages matching one of
+	  the (regex) patterns given as optional parameters
+
+1.1	20 Nov 2008
+	- updated docs, fixed typo's
+	- now '|' is shell critical character also (option convert 'shell')
+	- added Greg Baker's files for building a .depot on hpux
+
+1.2	23 Nov 2008
+	- forgotten to update CHANGES in already released and published 1.1
+	  release, so we made 1.2
+
+1.3	16 Jun 2010
+	- new option '3' for nagios3 compatible (multiline) output
+	- Added sample configs for Nagios 2 + 3
+	- Updated README.Nagios to Nagios 2 + 3
+	- Scanning for rotated logfiles now silently skips over to .1 if
+	  .0 is missing because some rotation tools start indexing with .1
+	- fixed: compiler warnings on Debian Linux
+
+1.4	28 Jun 2010
+	- bugfix: when using regex: when logfile has changed without new
+	  messages matching 'regex' fetchlog returned an empty message as
+	  'have messages' / exitcode 2 instead of 'no messages' / exitcode 0
+	  (This bug was introduced in 1.3 with conversion '3')
+	- introduced make target 'testall' to stress test fetchlog
+
+EOF
