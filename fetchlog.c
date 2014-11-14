@@ -50,10 +50,10 @@
  *************************************************/
 
 #define MIN_FIRSTCOL	1	/* Min first col for fetching	*/
-#define MAX_LASTCOL 	300 	/* Max last col for fetching	*/
+#define MAX_LASTCOL 	999 	/* Max last col for fetching	*/
 #define MIN_COLS	20	/* Min no of cols to fetch	*/
 #define MIN_FETCHLEN    50	/* Min length of fetched data */
-#define MAX_FETCHLEN    20000	/* Max length of fetched data */
+#define MAX_FETCHLEN    256000000	/* Max length of fetched data */
 
 #define OK_MESSAGE	"OK: no messages"
 #define ERR_MESSAGE	"ERROR: fetchlog: "
@@ -654,21 +654,21 @@ int check_farg( char *farg, int *conv ) {
 	else if( *pt==':' ) break;
 	else return 1;
     }
-    if( numdig <1 || numdig > 3 ) return 1;
+    if( numdig <1 || numdig > 3 ) return 1; //ct: firstcol
 
     for( pt++,numdig=0 ; *pt; pt++ ) {
 	if( isdigit( (int) *pt ) ) numdig++;
 	else if( *pt==':' ) break;
 	else return 1;
     }
-    if( numdig <1 || numdig > 3 ) return 1;
+    if( numdig <1 || numdig > 3 ) return 1; //ct: lastcol
 
     for( pt++,numdig=0 ; *pt; pt++ ) {
 	if( isdigit( (int) *pt ) ) numdig++;
 	else if( *pt==':' ) break;
 	else return 1;
     }
-    if( numdig <1 || numdig > 5 ) return 1;
+    if( numdig <1 || numdig > 9 ) return 1; //ct: len
 
     for( pt++,numc=0 ; *pt; pt++ ) {
 	if     ( *pt=='b' ) { *conv |= CONV_BRACKET; numc++; }
@@ -724,7 +724,7 @@ int main(int argc, char **argv)
     int  ret=0;
     int  i;
     int  rxerr;
-
+	
     /* check args */
     if (argc == 2) {
 	if( argv[1][0] == '-' && argv[1][1] == 'V' ) {
@@ -740,7 +740,7 @@ int main(int argc, char **argv)
 		    perr( "invalid parameter", "firstcol, lastcol, len or conv", 0 );
 		    exit( RET_PARAM );
 		}
-		ret = sscanf( argv[2], "%3d:%3d:%5d", 
+		ret = sscanf( argv[2], "%3d:%3d:%9d", 
 			      &firstcol_G, &lastcol_G, &fetchlen_G );
 		if( ret != 3 ) {
 		    perr( "invalid parameter", NULL, 0 );
