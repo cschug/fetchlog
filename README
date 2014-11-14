@@ -1,0 +1,211 @@
+
+file:   README
+author: Alexander Haderer
+date:	18 Jun 2010
+cvs:    $Id: README,v 1.8 2010/07/01 16:39:24 afrika Exp $
+
+                     R E A D M E      f e t c h l o g    
+
+
+WHAT IT IS
+
+  from the man page:
+
+      fetchlog -f firstcol:lastcol:len:conv logfile bookmarkfile [pattern ...]
+      fetchlog -F firstcol:lastcol:len:conv logfile bookmarkfile [pattern ...]
+
+  The fetchlog utility displays the last new messages of a logfile. It is 
+  similar like tail (1) but offers some extra functionality for output
+  formatting. To show only the new messages appeared since the last call
+  fetchlog uses a bookmark to remember which messages have been fetched.
+
+  fetchlog scans backwards a logfile and collects all messages, optionally
+  only those matching any of the given regex-style patterns. Then fetchlog
+  converts found message lines for output. It stops scanning when one of 
+  these conditions become true: The bookmark from bookmarkfile is reached, 
+  or more than len characters are ready for output, or an error occurs. 
+  fetchlog knows about rotated and uncompressed logfiles and continues 
+  scanning in rotated logfiles by appending '.0'/'.1' upto '.9' to logfile 
+  when scanning in rotated logfiles. Scanning stops without error when a 
+  rotated logfile does not exist.
+
+  fetchlog may be used as a local plugin for the Nagios network monitoring 
+  system to monitor a local logfile. It follows the calling convention for 
+  Nagios plugins when conversion is set at least to 'no' and len is short
+  enough for Nagios. Nagios can monitor remote logfiles together 
+  with NET-SNMP and fetchlog using the check-snmp plugin. 
+
+
+FILES
+
+  LICENSE		the GPL document
+  CHANGES		changes
+  README		this document
+  README.SNMP		how to setup NET-SNMP to look at remote logfiles
+  README.Nagios  	how to setup Nagios to monitor local/remote logfiles
+  Makefile		Makefile
+  fetchlog.c		the source
+  fetchlog.1		the manpage
+  fetchlog-Makefile.hpux Makefile for HP-UX (*)
+  fetchlog.psf		psf file for HP-UX to build a .depot by calling
+			'make fetchlog.depot' using 'fetchlog-Makefile (*)
+  fetchlog.cfg		Nagios config: check commands for services
+  fetchlog_service.cfg 	Nagios config: service template definition
+  notify.cfg.example 	Nagios config: example notification command
+
+  (*) Thanks to Greg Baker for these files.
+
+
+REQUIREMENTS
+  
+  A ANSI C compiler. 
+  
+  Platforms known to work:
+     FreeBSD 4.x and later
+     Linux x86  Kernel 2.2  and later
+     Solaris 2.6 with gcc
+     Irix 6.5 with gcc or cc
+     HP-UX
+     Debian based Linux
+
+
+INSTALL
+
+  Note for HP-UX: please use fetchlog-Makefile.hpux with target 
+  'fetchlog.depot' to build a fetchlog.depot.
+
+  All others:
+
+  After uncompressing the distribution read the 'user settings' section
+  in Makefile to set the compiler, the compile flags and the installation dir.
+
+  Do a 
+	make
+
+  If compilation fails because of 'MADV_RANDOM' undeclared'
+  then comment the line noted in Makefile (HAS_MADVISE).
+
+  If compilation fails because of missing regex functions in your operating
+  system with symptoms like:
+       compiler: "fetchlog.c: Can't find include file regex.h"
+       compiler: "fetchlog.c: unknown symbol REG_EXTENDED / REG_NOSUB"
+       linker:   "unknown symbol regexec/regcomp/regerror"
+  then comment the line in Makefile (HAS_REGEX)
+
+  Test the compiled program with a
+	make test
+
+  If you get 'ERROR: fetchlog: madvise: Invalid argument' then your system
+  does not support the RANDOM option for madvise() system call. Please edit
+  the Makefile: comment the line noted in Makefile (HAS_MADVISE), then do a
+     	make clean
+	make
+
+  and test again.
+
+  To do a long test do 'make testall', but notice: this test is implemented
+  as a shell script and has only been testet on FreeBSD.
+
+  To install in INSTDIR set in Makefile type:
+	make install
+
+  This will install the binary 'fetchlog' in INSTDIR/bin and the manpage in
+  INSTDIR/man/man1. These dirs have to exist else installation fails.
+
+
+UPGRADE
+
+  Install the new version over the old version. If you made any changes to
+  the old Makefile, apply them to the new Makefile, too. See INSTALL.
+
+  Remove the old bookmarkfiles! 
+
+
+EXAMPLE
+
+  To send out an email if new messages in /var/log/messages appeared within
+  the last 10 minutes, create a shell script similar like this:
+
+  --------------- snip -------------------
+  #!/bin/sh
+  HOST=`hostname`
+  FETCHLOG="/usr/local/bin/fetchlog -F 1:80:1000:s"
+  MSG=`$FETCHLOG /var/log/messages /tmp/msgbm`
+  if [ $? -gt 0 ] 
+  then
+        echo -e "$MSG" | \
+        /usr/bin/mail -s "SYSLOG: $HOST" admin@your.domain
+  fi
+  --------------- snap -------------------
+  
+  and add an entry in the crontab:
+
+  0,10,20,30,40,50 * * * * /path/to/shellscript >/dev/null 2>&1
+
+  It is not necessary to run the cronjob as root if /var/log/messages is 
+  readable for other users. 
+
+  Note: To avoid missing some messages check the rotation method for 
+ 	/var/log/messages: fetchlog does not work with compressed logfiles.
+
+  Note: If your mailing subsystem causes messages to appear in 
+	/var/log/messages you most probably have a severe problem.
+  
+  If you only want to pick 'serious' messages from a 'bubbled'
+  modify the MSG=... line above like this:
+
+  MSG=`$FETCHLOG /var/log/messages /tmp/msgbm 'bubbled.*serious'`
+
+
+  Other example: A tail -f thing that beeps whenever there is something 
+  with device0..3 or the sun is going down:
+
+  --------------- snip -------------------
+  #!/bin/sh
+  FETCHLOG="/usr/local/bin/fetchlog -F 1:100:1000:"
+  while true; do
+     MSG=`$FETCHLOG /var/log/messages /tmp/msgbm 'device[0-3]' 'sun.*down'`
+     if [ $? -gt 0 ]; then
+        echo -e "$MSG"
+        echo ^G; sleep 1; echo ^G
+     fi
+     sleep 5
+  done
+  --------------- snap -------------------
+
+
+
+DOWNLOAD
+  
+  Please look at http://fetchlog.sourceforge.net for current versions.
+
+
+FURTHER READING
+ 
+  The man page.
+
+  If you wanted just another tool to peek in your logfiles you are done.
+
+  If you want to do a remote look at your logfiles via SNMP please read the
+  file README.SNMP. Here you will find a setup for the NET-SNMP 
+  utilities. (for NET-SNMP please see http://www.net-snmp.org )
+
+  If you want to monitor your logfiles with the Network Monitor 
+  software Nagios, please first read the file README.SNMP for remote 
+  fetching and/or then README.Nagios. Users of other monitoring software 
+  may want to read this too. 
+  (for Nagios please see http://www.nagios.org )
+
+
+LEGAL
+
+   Nagios is a registered trademark of Ethan Galstad
+
+
+CONTACT
+
+  Author & maintainer: 
+	Alexander Haderer -- LoeScap Technology GmbH
+  	Email: alexander.haderer@loescap.de
+
+EOF
